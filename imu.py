@@ -20,6 +20,7 @@ imu = RTIMU.RTIMU(s)
 t_print = time.time()
 t_damp = time.time()
 t_fail = time.time()
+t_fail_timer = 0.0
 t_shutdown = 0
 
 if (not imu.IMUInit()):
@@ -83,18 +84,22 @@ while True:
           heading_sin_total = 0.0
           heading_cos_run = [0] * 30
           heading_sin_run = [0] * 30
-          imu_sentence = "$IIXDR,IMU_FAIL*6E"
+          t_fail_timer += 1
+          imu_sentence = "IIXDR,IMU_FAIL," + str(round(t_fail_timer / 60, 1))
+          cs = format(reduce(operator.xor,map(ord,imu_sentence),0),'X')
+          if len(cs) == 1:
+                cs = "0" + cs
+          imu_sentence = "$" + imu_sentence + "*" + cs
           sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
           sock.sendto(imu_sentence, (IMU_IP, IMU_PORT))
           t_fail = hack
           t_shutdown += 1
-          if t_shutdown > 29:
-              sys.exit(1)
 
   if imu.IMURead():
     data = imu.getIMUData()
     fusionPose = data["fusionPose"]
     Gyro = data["gyro"]
+    t_fail_timer = 0.0
 
     if (hack - t_damp) > .1:
         roll = round(math.degrees(fusionPose[0]), 1)
@@ -148,7 +153,6 @@ while True:
 
             imu_sentence = iihdt + '\r\n' + iixdr
 
-            #print imu_sentence
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.sendto(imu_sentence, (IMU_IP, IMU_PORT))
 

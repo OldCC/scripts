@@ -13,7 +13,7 @@ gonksock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 gonksock.bind((GONK_IP, GONK_PORT))
 
 # initialize sentence
-gonk_sentence = ''
+gonk_sentence = '$IIXDR,GONKULATOR_INITIALIZING*2C\r\n'
 
 # timers
 t_gonk = time.time()
@@ -40,7 +40,7 @@ while True:
         t_print = hack
         if gonk_sentence == "$IIXDR,gonkulator.py_script_fail*54":
             t_fail -= 1
-            fail_sentence = "IIXDR,restarting," + str(t_fail)
+            fail_sentence = "IIXDR,restarting_in_" + str(t_fail)
             failcs = format(reduce(operator.xor,map(ord,fail_sentence),0),'X')
             if len(failcs) == 1:
                 failcs = "0" + failcs
@@ -49,7 +49,6 @@ while True:
             if t_fail == 0:
                 time.sleep(1.5)
                 os.system("sudo reboot")
-        print gonk_sentence
         kplexsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         kplexsock.sendto(gonk_sentence, (KPLEX_IP, KPLEX_PORT))
         

@@ -39,9 +39,12 @@ t_imu = time.time()
 t_gps = time.time()
 t_dst = time.time()
 t_vhw = time.time()
-t_imu_restart = 0
-t_gps_restart = 0
-t_dst_restart = 0
+t_imu_restart = 30
+t_gps_restart = 30
+t_dst_restart = 30
+imu_fail_count = 0
+gps_fail_count = 0
+dst_fail_count = 0
 
 # blank sentences
 iihdt0 = "$IIHDT,,T*0C"
@@ -63,10 +66,10 @@ yxmtw = ''
 vwvhw = ''
 vwvlw = ''
 iivdr = ''
-imusentence = ''
-gpssentence = ''
-dstsentence = ''
-vdrsentence = ''
+imusentence = '$IIXDR,IMU_INITIALIZING*61'
+gpssentence = '$IIXDR,GPS_INITIALIZING*74'
+dstsentence = '$IIXDR,DST_INITIALIZING*73'
+vdrsentence = '$IIXDR,VDR_INITIALIZING*70'
 
 # data drops
 imu_init_fail = 0
@@ -100,8 +103,8 @@ while True:
     if imuready[0]:
         t_imu = hack
         data, addr = imusock.recvfrom(1024)
-
-        if data == "$IIXDR,IMU_FAILED_TO_INITIALIZE*7C":
+        imuvars = data.split(',')
+        if imuvars[1] == "IMU_FAILED_TO_INITIALIZE":
             imu_init_fail = 1
             imu_fail_drop = 0
             imu_timeout_drop = 0
@@ -110,7 +113,7 @@ while True:
                 imusentence = iihdt0 + '\r\n' + iixdr0
                 imu_init_drop = 1
             else: imusentence = data
-        elif data == "$IIXDR,IMU_FAIL*6E":
+        elif imuvars[1] == "IMU_FAIL":
             imu_init_fail = 0
             imu_init_drop = 0
             imu_timeout_drop = 0
@@ -118,14 +121,13 @@ while True:
             if imu_fail_drop == 0:
                 imusentence = iihdt0 + '\r\n' + iixdr0
                 imu_fail_drop = 1
-            else: imusentence = data
+            else: imusentence = data + '\r\n'
         else:
             imu_init_fail = 0
             imu_init_drop = 0
             imufail = 0
             imu_fail_drop = 0
             imu_timeout_drop = 0
-            imuvars = data.split(',')
             heading = float(imuvars[1])
             roll = float(imuvars[4])
             pitch = float(imuvars[8])
@@ -136,14 +138,20 @@ while True:
         if imu_timeout_drop == 0:
             imusentence = iihdt0 + '\r\n' + iixdr0
             imu_timeout_drop = 1
-        else: imusentence = "$IIXDR,imu.py_script_fail*39"
+        else:
+            imusentence = "IIXDR,imu.py_script_fail," + str(imu_fail_count) + "," +  str(t_imu_restart)
+            cs = format(reduce(operator.xor,map(ord,imusentence),0),'X')
+            if len(cs) == 1:
+                cs = "0" + cs
+            imusentence = "$" + imusentence + "*" + cs
 
     ##### VK-172 GPS USB DONGLE #####
     gpsready = select.select([gpssock], [], [], .1)
     if gpsready [0]:
         t_gps = hack
         data, addr = gpssock.recvfrom(1024)
-        if data == "$IIXDR,GPS_FAIL*7B":
+        gpssentence = data.split(',')
+        if gpssentence[1] == "GPS_FAIL":
             gpsfail = 1
             if gpsdrop == 1:
                 gpssentence = gprmc0
@@ -153,8 +161,7 @@ while True:
             t_gps = hack
             gpsdrop = 1
             gps_timeout_drop = 1
-            gpssentence = data.split(',')
-
+            
             # GPRMC
             if gpssentence[8] != '' and gpssentence[7] != '':
                 gpsfail = 0
@@ -162,7 +169,7 @@ while True:
                 groundspeed = float(gpssentence[7])
                 if (imufail == 0) and (groundspeed < .1):
                     course = heading
-                rmc = "GPRMC," + gpssentence[1] + ',' + gpssentence[2] + ',' + gpssentence[3] + ',' + gpssentence[4] + ',' + gpssentence[5] + ',' + gpssentence[6] + ',' + str(groundspeed) + ',' + str(course) + ',' + gpssentence[9] + ',,'
+                rmc = "GPRMC," + gpssentence[1] + ',' + gpssentence[2] + ',' + gpssentence[3] + ',' + gpssentence[4] + ',' + gpssentence[5] + ',' + gpssentence[6] + ',' + str(groundspeed) + ',' + str(int(round(course))) + ',' + gpssentence[9] + ',,'
                 rmccs = format(reduce(operator.xor,map(ord,rmc),0),'X')
                 if len(rmccs) == 1:
                         rmccs = "0" + rmccs
@@ -179,14 +186,20 @@ while True:
         if gps_timeout_drop == 1:
             gpssentence = gprmc0
             gps_timeout_drop = 0
-        else: gpssentence = "$IIXDR,gps.py_script_fail*2C"
+        else:
+            gpssentence = "IIXDR,gps.py_script_fail," + str(gps_fail_count) + "," +  str(t_gps_restart)
+            cs = format(reduce(operator.xor,map(ord,gpssentence),0),'X')
+            if len(cs) == 1:
+                cs = "0" + cs
+            gpssentence = "$" + gpssentence + "*" + cs
 
     ##### DST-800 TRIDUCER #####
     dstready = select.select([dstsock], [], [], .1)
     if dstready[0]:
         t_dst = hack
         data, addr = dstsock.recvfrom(1024)
-        if data == "$IIXDR,DST_FAIL*7C":
+        dstsentence = data.split(',')
+        if dstsentence[1] == "DST_FAIL":
             vhwfail = 1
             if dstdrop == 0:
                 dstsentence = sddpt0 + '\r\n' + yxmtw0 + '\r\n' + vwvhw0 + '\r\n' + vwvlw0
@@ -195,7 +208,6 @@ while True:
         else:
             dstdrop = 0
             dst_timeout_drop = 0
-            dstsentence = data.split(',')
             title = dstsentence[0]
     
             # SDDPT
@@ -250,7 +262,12 @@ while True:
         if dst_timeout_drop == 1:
             dstsentence = sddpt0 + '\r\n' + yxmtw0 + '\r\n' + vwvhw0 + '\r\n' + vwvlw0
             dst_timeout_drop = 0
-        else: dstsentence = "$IIXDR,dst.py_script_fail*2B"
+        else:
+            dstsentence = "IIXDR,dst.py_script_fail," + str(dst_fail_count) + "," + str(t_dst_restart)
+            cs = format(reduce(operator.xor,map(ord,dstsentence),0),'X')
+            if len(cs) == 1:
+                cs = "0" + cs
+            dstsentence = "$" + dstsentence + "*" + cs
 
     if (hack - t_vhw) > 10.0:
         vhwfail = 1
@@ -327,7 +344,6 @@ while True:
         gonksentence = imusentence + '\r\n' + dstsentence + '\r\n' + gpssentence + '\r\n'
         if vdrfail == 0:
             gonksentence = gonksentence + vdrsentence + '\r\n' + mwvsentence + '\r\n'
-        #print gonksentence
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.sendto(gonksentence, (GONK_IP, GONK_PORT))
         t_print = hack
@@ -335,21 +351,27 @@ while True:
         if t_ten > 9:
             t_ten = 0
 
-        if (imusentence == "$IIXDR,imu.py_script_fail*39"):
-            t_imu_restart += 1
-            if t_imu_restart > 9:
+        if (imusentence.split(',')[1] == "imu.py_script_fail"):
+            t_imu_restart -= 1
+            if t_imu_restart == 0:
+                imu_fail_count += 1
+                t_imu_restart = 30
                 os.system("pkill -9 -f imu.py")
                 os.system("python imu.py &")
 
-        if (gpssentence == "$IIXDR,gps.py_script_fail*2C"):
-            t_gps_restart += 1
-            if t_gps_restart > 9:
+        if (gpssentence.split(',')[1] == "gps.py_script_fail"):
+            t_gps_restart -= 1
+            if t_gps_restart == 0:
+                gps_fail_count += 1
+                t_gps_restart = 30
                 os.system("pkill -9 -f gps.py")
                 os.system("python gps.py &")
 
-        if (dstsentence == "$IIXDR,dst.py_script_fail*2B"):
-            t_dst_restart += 1
-            if t_dst_restart > 9:
+        if (dstsentence.split(',')[1] == "dst.py_script_fail"):
+            t_dst_restart -= 1
+            if t_dst_restart == 0:
+                dst_fail_count += 1
+                t_dst_restart = 30
                 os.system("pkill -9 -f dst.py")
                 os.system("python dst.py &")
             
