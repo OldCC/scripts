@@ -5,13 +5,6 @@ if [ "$EUID" -ne 0 ]
 	exit
 fi
 
-if [[ $# -ne 1 ]]; 
-	then echo "You need to pass a password!"
-	echo "Usage:"
-	echo "sudo $0 yourChosenPassword [apName]"
-	exit
-fi
-
 apt-get remove --purge hostapd -y
 apt-get install hostapd dnsmasq -y
 
@@ -29,8 +22,8 @@ wpa=2
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=CCMP
 rsn_pairwise=CCMP
-wpa_passphrase=lighthouse
-ssid=freyja
+wpa_passphrase=PASSWORD
+ssid=NAME
 EOF
 
 sed -i -- 's/exit 0/ /g' /etc/rc.local
