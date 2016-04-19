@@ -7,9 +7,14 @@ import time
 import math
 import operator
 import socket
+import os
+
 
 IMU_IP = "127.0.0.2"
 IMU_PORT = 5005
+
+MON_IP = "127.0.0.5"
+MON_PORT = 5005
 
 SETTINGS_FILE = "RTIMULib"
 
@@ -49,7 +54,7 @@ heading = 0.0
 rollrate = 0.0
 pitchrate = 0.0
 yawrate = 0.0
-magnetic_deviation = -13.7
+magnetic_deviation = -13.73
 
 
 # dampening variables
@@ -70,6 +75,7 @@ iixdr = iixdr0
 freq = 1
 
 while True:
+
   hack = time.time()
 
   # if it's been longer than 5 seconds since last print
@@ -103,23 +109,20 @@ while True:
 
     if (hack - t_damp) > .1:
         roll = round(math.degrees(fusionPose[0]), 1)
-        pitch = round(math.degrees(fusionPose[1]), 1)
+	pitch = round(math.degrees(fusionPose[1]), 1)
         yaw = round(math.degrees(fusionPose[2]), 1)
         rollrate = round(math.degrees(Gyro[0]), 1)
         pitchrate = round(math.degrees(Gyro[1]), 1)
         yawrate = round(math.degrees(Gyro[2]), 1)
-        if yaw < 90.1:
-            heading = yaw + 270 - magnetic_deviation
-        else:
-            heading = yaw - 90 - magnetic_deviation
-        if heading > 360.0:
-            heading = heading - 360.0
-            
+        heading = yaw + 14
+	if heading < 0.1:
+            heading = heading + 360
+    
         # Dampening functions
         roll_total = roll_total - roll_run[t_one]
         roll_run[t_one] = roll
         roll_total = roll_total + roll_run[t_one]
-        roll = roll_total / 10
+        roll = round(roll_total / 10, 1)
         heading_cos_total = heading_cos_total - heading_cos_run[t_three]
         heading_sin_total = heading_sin_total - heading_sin_run[t_three]
         heading_cos_run[t_three] = math.cos(math.radians(heading))
@@ -139,20 +142,34 @@ while True:
             t_three = 0
   
         if (hack - t_print) > 1:
+
+            # health monitor
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.sendto(str(hack), (MON_IP, MON_PORT))
+
+            # iihdt true heading
             hdt = "IIHDT," + str(round(heading))[:-2] + ",T"
             hdtcs = format(reduce(operator.xor,map(ord,hdt),0),'X')
             if len(hdtcs) == 1:
                 hdtcs = "0" + hdtcs
             iihdt = "$" + hdt + "*" + hdtcs
-        
+
+	    # iixdr ahrs data
             xdr = "IIXDR,A," + str(int(round(roll))) + ",D,ROLL,A,"  + str(int(round(pitch))) + ",D,PTCH,A," + str(int(round(rollrate))) + ",D,RLLR,A," + str(int(round(pitchrate))) + ",D,PTCR,A," + str(int(round(yawrate))) + ",D,YAWR"
             xdrcs = format(reduce(operator.xor,map(ord,xdr),0),'X')
             if len(xdrcs) == 1:
                 xdrcs = "0" + xdrcs
             iixdr = "$" + xdr + "*" + xdrcs
 
-            imu_sentence = iihdt + '\r\n' + iixdr
+            # assemble the sentence
+            imu_sentence = iihdt + '\r\n' + iixdr + '\r\n'
 
+            # to imu bus
+            f = open('imu_bus', 'w')
+            f.write(str(t_print) + ',' + str(heading) + ',' + str(roll)  + ',' + str(pitch))
+            f.close()
+
+            # To kplex
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.sendto(imu_sentence, (IMU_IP, IMU_PORT))
 

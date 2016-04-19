@@ -12,8 +12,8 @@
 
 # Change the next 3 lines to suit where you install your script and what you want to call it
 DIR=/home/pi/kts/scripts
-DAEMON=$DIR/init.py
-DAEMON_NAME=initialize
+DAEMON=$DIR/monitor.py
+DAEMON_NAME=monitor
 
 # Add any command line options for your daemon here
 DAEMON_OPTS=""
