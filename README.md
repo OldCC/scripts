@@ -5,4 +5,4 @@ Extracts NMEA-0183 data from the DST-800 Triducer, a BU-353 USB GPS, and an MPU-
 
 All these scripts here should be located in the /kts/scripts folder. The RTIMULibCal.ini file should also be located in this folder with these scripts. The RTEllipsoidFit folder should be located in the /kts/ directory.
 
-See kingtidesailing.blogspot.com for more. Keep in mind, this was written by a non-programmer, so it probably is not the most efficient way to do things, and will probably be riddled with errors.
+See https://kingtidesailing.blogspot.com/2016/04/make-wireless-nmea-0183-multiplexer.html for more. Keep in mind, this was written by a non-programmer, so it probably is not the most efficient way to do things, and will probably be riddled with errors.
