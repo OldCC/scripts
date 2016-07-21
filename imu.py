@@ -54,8 +54,11 @@ heading = 0.0
 rollrate = 0.0
 pitchrate = 0.0
 yawrate = 0.0
-magnetic_deviation = -13.73
 
+# magnetic deviation
+f = open('mag', 'r')
+magnetic_deviation = float(f.readline())
+f.close()
 
 # dampening variables
 t_one = 0
@@ -114,9 +117,11 @@ while True:
         rollrate = round(math.degrees(Gyro[0]), 1)
         pitchrate = round(math.degrees(Gyro[1]), 1)
         yawrate = round(math.degrees(Gyro[2]), 1)
-        heading = yaw + 14
+        heading = yaw - magnetic_deviation + 7
 	if heading < 0.1:
             heading = heading + 360
+	if heading > 360:
+	    heading = heading - 360
     
         # Dampening functions
         roll_total = roll_total - roll_run[t_one]
@@ -155,14 +160,21 @@ while True:
             iihdt = "$" + hdt + "*" + hdtcs
 
 	    # iixdr ahrs data
-            xdr = "IIXDR,A," + str(int(round(roll))) + ",D,ROLL,A,"  + str(int(round(pitch))) + ",D,PTCH,A," + str(int(round(rollrate))) + ",D,RLLR,A," + str(int(round(pitchrate))) + ",D,PTCR,A," + str(int(round(yawrate))) + ",D,YAWR"
+            xdr = "IIXDR,A," + str(int(round(roll))) + ",D,ROLL,A,"  + str(int(round(pitch))) + ",D,PTCH,A"
             xdrcs = format(reduce(operator.xor,map(ord,xdr),0),'X')
             if len(xdrcs) == 1:
                 xdrcs = "0" + xdrcs
             iixdr = "$" + xdr + "*" + xdrcs
 
+	    # tirot rate of turn
+	    rot = "TIROT," + str(yawrate*60) + ",A"
+	    rotcs = format(reduce(operator.xor,map(ord,rot),0),'X')
+            if len(rotcs) == 1:
+                rotcs = "0" + rotcs
+            tirot = "$" + rot + "*" + rotcs
+
             # assemble the sentence
-            imu_sentence = iihdt + '\r\n' + iixdr + '\r\n'
+            imu_sentence = iihdt + '\r\n' + iixdr + '\r\n' + tirot + '\r\n'
 
             # to imu bus
             f = open('imu_bus', 'w')

@@ -22,8 +22,8 @@ wpa=2
 wpa_key_mgmt=WPA-PSK
 wpa_pairwise=CCMP
 rsn_pairwise=CCMP
-wpa_passphrase=PASSWORD
-ssid=NAME
+wpa_passphrase=lighthouse
+ssid=freyja
 EOF
 
 sed -i -- 's/exit 0/ /g' /etc/rc.local

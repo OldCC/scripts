@@ -13,7 +13,6 @@ MON_IP = "127.0.0.6"
 MON_PORT = 5005
 
 mon = 0
-log = time.time()
 
 # initialize for VDR
 five = 0
@@ -28,14 +27,13 @@ drift_run = [0] * 5
 vlwfirst = 1
 vlwinit = 0.0
 
-# determine dst port
-f = open('gps_port', 'r')
-gps_port = f.readline()
+# initialize log
+log = time.time()
+f = open('dstraw', 'w')
+f.write("Last 60 Seconds DST Raw Input:\r\n")
 f.close()
-dst_port = "1"
-if gps_port == "1":
-    dst_port = "0"
-ser = serial.Serial('/dev/ttyUSB' + dst_port, 4800, timeout=5)
+
+ser = serial.Serial('/dev/dst', 4800, timeout=5)
 
 while True:
 
@@ -54,7 +52,7 @@ while True:
     if hack - log > 60:
         os.remove('dstraw')
         f = open('dstraw', 'w')
-        f.write("Serial port " + dst_port + ": " + time.asctime( time.localtime(time.time()) ) + "\r\n")
+        f.write("Last 60 Seconds DST Raw Input:\r\n")
         f.close()
         log = hack
     
@@ -113,21 +111,20 @@ while True:
                 sock.sendto(sddpt, (DST_IP, DST_PORT))
 
             # mean water temp sentence
-            if title == "YXMTW":
+            elif title == "YXMTW":
 
-                # convert to fahrenheit
-                mtw = dst_vars[0] + "," + str(int(float(dst_vars[1]) * 9 / 5 + 32)) + ",F"
-                cs = format(reduce(operator.xor,map(ord,mtw),0),'X')
-                if len(cs) == 1:
-                    cs = "0" + cs
-                yxmtw = "$" + mtw + "*" + cs + "\r\n"
+                # write to bus
+                mtw = dst_vars[1]
+		f = open('dst_bus', 'w')
+		f.write(mtw)
+		f.close()
 
                 # to kplex
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.sendto(yxmtw, (DST_IP, DST_PORT))
+                sock.sendto(dst_raw, (DST_IP, DST_PORT))
 
             # vessel waterspeed sentence and current set and drift
-            if title == "VWVHW":
+            elif title == "VWVHW":
 
                 # heading and roll from imu
                 try:
@@ -247,19 +244,12 @@ while True:
                         vdrcs = "0" + vdrcs
                     iivdr = "$" + vdr + "*" + vdrcs + "\r\n"
 
-                    # ghost MWV sentence to show set/drift instead of wind
-                    mwv = "IIMWV," + str(int(set_apparent)) + ",R," + str(round(drift,1)) + ",N,A"
-                    mwvcs = format(reduce(operator.xor,map(ord,mwv),0),'X')
-                    if len(mwvcs) == 1:
-                        mwvcs = "0" + mwvcs
-                    iimwv = "$" + mwv + "*" + mwvcs + "\r\n"
-
                     # to kplex
                     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    sock.sendto(iivdr + iimwv, (DST_IP, DST_PORT))
+                    sock.sendto(iivdr, (DST_IP, DST_PORT))
 
             # voyage log sentence
-            if title == "VWVLW":
+            elif title == "VWVLW":
 
                 # calculate present trip total vs overall total
                 if vlwfirst == 1:
@@ -275,3 +265,10 @@ while True:
                 # to kplex
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 sock.sendto(vwvlw, (DST_IP, DST_PORT))
+	  
+	    # if it's any other valid NMEA sentence
+            else:
+
+                # to kplex
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.sendto(dst_raw, (DST_IP, DST_PORT))

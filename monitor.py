@@ -11,113 +11,26 @@ import select
 # change the working directory to the scripts folder
 os.chdir("home/pi/kts/scripts")
 
-# log
-hack = time.asctime( time.localtime(time.time()) )
+# log and begin instrument scripts
 log = open('log', 'w')
-log.write("Monitor initialized: " + str(hack) + "\r\n")
-log.close()
-
-# determine GPS/DST ports
-init = 0
-while init == 0:
-
-    # check port 0
-    port0 = serial.Serial('/dev/ttyUSB0', 4800, timeout=3)
-    port0_raw = port0.readline()
-    hack = time.asctime( time.localtime(time.time()) )
-    log = open('log', 'a')
-    log.write("Checking serial port 0: " + str(hack) + "\r\n")
-    log.close()
-    if "*" in port0_raw:
-        port0_split = port0_raw.split('*')
-        port0_sentence = port0_split[0].strip('$')
-        cs0 = port0_split[1][:-2]
-        cs1 = format(reduce(operator.xor,map(ord,port0_sentence),0),'X')
-        if len(cs1) == 1:
-            cs1 = "0" + cs1
-
-        # if it is a valid NMEA sentence
-        if cs0 == cs1:
-            port0_vars = port0_sentence.split(',')
-            title = port0_vars[0]
-
-            # if the GPS is connected to this port
-            if title == "GPRMC":
-                gps = "0"
-                f = open('gps_port', 'w')
-                f.write(gps)
-                f.close()
-                init = 1
-
-            # if the DST is connected to this port
-            if title == "SDDPT":
-                gps = "1"
-                f = open('gps_port', 'w')
-                f.write(gps)
-                f.close()
-                init = 1
-    port0.close()
-
-    # check port 1
-    port1 = serial.Serial('/dev/ttyUSB1', 4800, timeout=3)
-    port1_raw = port1.readline()
-    hack = time.asctime( time.localtime(time.time()) )
-    log = open('log', 'a')
-    log.write("Checking serial port 1: " + str(hack) + "\r\n")
-    log.close()
-    if "*" in port1_raw:
-        port1_split = port1_raw.split('*')
-        port1_sentence = port1_split[0].strip('$')
-        cs0 = port1_split[1][:-2]
-        cs1 = format(reduce(operator.xor,map(ord,port1_sentence),0),'X')
-        if len(cs1) == 1:
-            cs1 = "0" + cs1
-
-        # if it is a valid NMEA sentence
-        if cs0 == cs1:
-            port1_vars = port1_sentence.split(',')
-            title = port1_vars[0]
-
-            # if the GPS is connected to this port
-            if title == "GPRMC":
-                gps = "1"
-                f = open('gps_port', 'w')
-                f.write(gps)
-                f.close()
-                init = 1
-
-            # if the DST is connected to this port
-            if title == "SDDPT":
-                gps = "0"
-                f = open('gps_port', 'w')
-                f.write(gps)
-                f.close()
-                init = 1
-    port1.close()
-
-log = open('log', 'a')
-log.write("GPS port is " + gps + ": " + str(hack) + "\r\n")
-log.close()
-
-# begin the instrument scripts
-hack = time.asctime( time.localtime(time.time()) )
-log = open('log', 'a')
-log.write("Starting gps: " + str(hack) + "\r\n")
+log.write("Monitor Initialized\r\n")
+log.write("Starting GPS...\r\n")
 log.close()
 os.system("python gps.py &")
-hack = time.asctime( time.localtime(time.time()) )
 log = open('log', 'a')
-log.write("Starting imu: " + str(hack) + "\r\n")
+log.write("Starting IMU...\r\n")
 log.close()
 os.system("python imu.py &")
-hack = time.asctime( time.localtime(time.time()) )
 log = open('log', 'a')
-log.write("Starting dst: " + str(hack) + "\r\n")
+log.write("Starting DST...\r\n")
 log.close()
 os.system("python dst.py &")
-hack = time.asctime( time.localtime(time.time()) )
 log = open('log', 'a')
-log.write("Starting kplex: " + str(hack) + "\r\n")
+log.write("Starting BME...\r\n")
+log.close()
+os.system("python bme.py &")
+log = open('log', 'a')
+log.write("Starting kplex...\r\n")
 log.close()
 os.system("sudo kplex &")
 
@@ -136,14 +49,19 @@ DST_PORT = 5005
 dstsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 dstsock.bind((DST_IP, DST_PORT))
 
-hack = time.asctime( time.localtime(time.time()) )
+BME_IP = "127.0.0.8"
+BME_PORT = 5005
+bmesock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+bmesock.bind((BME_IP, BME_PORT))
+
 log = open('log', 'a')
-log.write("Starting loop: " + str(hack) + "\r\n" + "------------------------\r\n")
+log.write("Starting Loop\r\n------------------------\r\n")
 log.close()
 
 gps_hack = time.time()
 imu_hack = time.time()
 dst_hack = time.time()
+
 while True:
 
     # monitor gps.py
@@ -152,14 +70,12 @@ while True:
         data, addr = gpssock.recvfrom(1024)
         gps_hack = float(data)
     if time.time() - gps_hack > 10.0:
-        hack = time.asctime( time.localtime(time.time()) )
         log = open('log', 'a')
-        log.write("Restarting gps: " + str(hack) + "\r\n")
+        log.write("Restarting GPS...\r\n")
         log.close()
         os.system("pkill -9 -f gps.py")
         os.system("python gps.py &")
-        gps_hack = time.time()
-        
+        gps_hack = time.time()        
 
     # monitor imu.py
     imuready = select.select([imusock], [], [], .1)
@@ -167,9 +83,8 @@ while True:
         data, addr = imusock.recvfrom(1024)
         imu_hack = float(data)
     if time.time() - imu_hack > 10.0:
-        hack = time.asctime( time.localtime(time.time()) )
         log = open('log', 'a')
-        log.write("Restarting imu: " + str(hack) + "\r\n")
+        log.write("Restarting IMU...\r\n")
         log.close()
         os.system("pkill -9 -f imu.py")
         os.system("python imu.py &")
@@ -181,10 +96,22 @@ while True:
         data, addr = dstsock.recvfrom(1024)
         dst_hack = float(data)
     if time.time() - dst_hack > 10.0:
-        hack = time.asctime( time.localtime(time.time()) )
         log = open('log', 'a')
-        log.write("Restarting dst: " + str(hack) + "\r\n")
+        log.write("Restarting DST...\r\n")
         log.close()
         os.system("pkill -9 -f dst.py")
         os.system("python dst.py &")
         dst_hack = time.time()
+
+    # monitor bme.py
+    bmeready = select.select([bmesock], [], [], .1)
+    if bmeready [0]:
+        data, addr = bmesock.recvfrom(1024)
+        bme_hack = float(data)
+    if time.time() - bme_hack > 60:
+        log = open('log', 'a')
+        log.write("Restarting BME...\r\n")
+        log.close()
+        os.system("pkill -9 -f bme.py")
+        os.system("python bme.py &")
+        bme_hack = time.time()

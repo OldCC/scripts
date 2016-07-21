@@ -13,13 +13,14 @@ MON_IP = "127.0.0.4"
 MON_PORT = 5005
 
 mon = 0
-log = time.time()
 
-# determine gps port
-f = open('gps_port', 'r')
-gps_port = f.readline()
+# initialize log
+log = time.time()
+f = open('gpsraw', 'w')
+f.write("Last 60 Seconds GPS Raw Input:\r\n")
 f.close()
-ser = serial.Serial('/dev/ttyUSB' + gps_port, 4800, timeout=5)
+
+ser = serial.Serial('/dev/gps', 4800, timeout=5)
 
 while True:
 
@@ -38,7 +39,7 @@ while True:
     if hack - log > 60:
         os.remove('gpsraw')
         f = open('gpsraw', 'w')
-        f.write("Serial port " + gps_port + ": " + time.asctime( time.localtime(time.time()) ) + "\r\n")
+        f.write("Last 60 Seconds GPS Raw Input:\r\n")
         f.close()
         log = hack
 
@@ -57,8 +58,8 @@ while True:
             title = gps_vars[0]
 
             # recommended minimum navigation sentence
-            if title == "GPRMC":
-
+            if title == "GPRMC" and gps_vars[2] == "A":
+	    
                 # heading from IMU
                 try:
                     f = open('imu_bus', 'r')
@@ -92,6 +93,18 @@ while True:
                         rmccs = "0" + rmccs
                 gprmc = "$" + rmc + "*" + rmccs + "\r\n"
 
+		vtg = "GPVTG," + str(course) + ",T,,M," + str(groundspeed) + ",N,,K,D"
+		vtgcs = format(reduce(operator.xor,map(ord,vtg),0),'X')
+                if len(vtgcs) == 1:
+                        vtgcs = "0" + vtgcs
+                gpvtg = "$" + vtg + "*" + vtgcs + "\r\n"
+
+		zda = "GPZDA," + gps_vars[1] + "," + gps_vars[9][:2] + "," + gps_vars[9][2:4] + ",20" + gps_vars[9][4:] + ",,"
+		zdacs = format(reduce(operator.xor,map(ord,zda),0),'X')
+                if len(zdacs) == 1:
+                        zdacs = "0" + zdacs
+                gpzda = "$" + zda + "*" + zdacs + "\r\n"
+
                 # to gps bus
                 f = open('gps_bus', 'w')
                 f.write(str(time.time()) + ',' + valid + ',' + str(course)  + ',' + str(groundspeed))
@@ -99,4 +112,10 @@ while True:
 
                 # to kplex
                 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                sock.sendto(gprmc, (GPS_IP, GPS_PORT))
+                sock.sendto(gprmc + gpvtg + gpzda, (GPS_IP, GPS_PORT))
+
+	    # else print the sentence
+	    else:
+		# to kplex
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.sendto(gps_raw, (GPS_IP, GPS_PORT))
