@@ -9,7 +9,6 @@ import operator
 import socket
 import os
 
-
 IMU_IP = "127.0.0.2"
 IMU_PORT = 5005
 
@@ -20,6 +19,11 @@ SETTINGS_FILE = "RTIMULib"
 
 s = RTIMU.Settings(SETTINGS_FILE)
 imu = RTIMU.RTIMU(s)
+
+# offsets
+yawoff = 0.0
+pitchoff = 0.0
+rolloff = 0.0
 
 # timers
 t_print = time.time()
@@ -70,13 +74,6 @@ heading_sin_total = 0.0
 heading_cos_run = [0] * 30
 heading_sin_run = [0] * 30
 
-# sentences produces by the imu
-iihdt0 = "$IIHDT,,T*0C"
-iixdr0 = "$IIXDR,A,,D,ROLL,A,,D,PTCH,A,,D,RLLR,A,,D,PTCR,A,,D,YAWR*51"
-iihdt = iihdt0
-iixdr = iixdr0
-freq = 1
-
 while True:
 
   hack = time.time()
@@ -111,17 +108,16 @@ while True:
     t_fail_timer = 0.0
 
     if (hack - t_damp) > .1:
-        roll = round(math.degrees(fusionPose[0]), 1)
-	pitch = round(math.degrees(fusionPose[1]), 1)
-        yaw = round(math.degrees(fusionPose[2]), 1)
+        roll = round(math.degrees(fusionPose[0]) - rolloff, 1)
+	pitch = round(math.degrees(fusionPose[1]) - pitchoff, 1)
+        yaw = round(math.degrees(fusionPose[2])- yawoff, 1)
         rollrate = round(math.degrees(Gyro[0]), 1)
         pitchrate = round(math.degrees(Gyro[1]), 1)
         yawrate = round(math.degrees(Gyro[2]), 1)
-        heading = yaw - magnetic_deviation + 7
-	if heading < 0.1:
-            heading = heading + 360
-	if heading > 360:
-	    heading = heading - 360
+	if yaw < 0.1:
+            yaw = yaw + 360
+	if yaw > 360:
+	    yaw = yaw - 360
     
         # Dampening functions
         roll_total = roll_total - roll_run[t_one]
@@ -130,13 +126,20 @@ while True:
         roll = round(roll_total / 10, 1)
         heading_cos_total = heading_cos_total - heading_cos_run[t_three]
         heading_sin_total = heading_sin_total - heading_sin_run[t_three]
-        heading_cos_run[t_three] = math.cos(math.radians(heading))
-        heading_sin_run[t_three] = math.sin(math.radians(heading))
+        heading_cos_run[t_three] = math.cos(math.radians(yaw))
+        heading_sin_run[t_three] = math.sin(math.radians(yaw))
         heading_cos_total = heading_cos_total + heading_cos_run[t_three]
         heading_sin_total = heading_sin_total + heading_sin_run[t_three]
-        heading = round(math.degrees(math.atan2(heading_sin_total/30,heading_cos_total/30)),1)
+        yaw = round(math.degrees(math.atan2(heading_sin_total/30,heading_cos_total/30)),1)
+        if yaw < 0.1:
+            yaw = yaw + 360.0
+
+        # yaw is magnetic heading, convert to true heading
+        heading = yaw - magnetic_deviation
         if heading < 0.1:
-            heading = heading + 360.0
+            heading = heading + 360
+	if heading > 360:
+	    heading = heading - 360
 
         t_damp = hack
         t_one += 1
@@ -151,6 +154,13 @@ while True:
             # health monitor
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.sendto(str(hack), (MON_IP, MON_PORT))
+
+            # iihdm magnetic heading
+            hdm = "IIHDM," + str(round(yaw))[:-2] + ",M"
+            hdmcs = format(reduce(operator.xor,map(ord,hdm),0),'X')
+            if len(hdmcs) == 1:
+                hdmcs = "0" + hdmcs
+            iihdm = "$" + hdm + "*" + hdmcs
 
             # iihdt true heading
             hdt = "IIHDT," + str(round(heading))[:-2] + ",T"
@@ -174,7 +184,7 @@ while True:
             tirot = "$" + rot + "*" + rotcs
 
             # assemble the sentence
-            imu_sentence = iihdt + '\r\n' + iixdr + '\r\n' + tirot + '\r\n'
+            imu_sentence = iihdm + '\r\n' + iihdt + '\r\n' + iixdr + '\r\n' + tirot + '\r\n'
 
             # to imu bus
             f = open('imu_bus', 'w')
