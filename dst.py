@@ -238,7 +238,7 @@ while True:
                         five = 0
                     
                     # assemble the sentence
-                    vdr = "IIVDR,A," + str(int(set_true)) + ",T,,,M," + str(round(drift,1)) + ",N"
+                    vdr = "IIVDR," + str(int(set_true)) + ",T,,M," + str(round(drift,1)) + ",N"
                     vdrcs = format(reduce(operator.xor,map(ord,vdr),0),'X')
                     if len(vdrcs) == 1:
                         vdrcs = "0" + vdrcs
